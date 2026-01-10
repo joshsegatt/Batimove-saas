@@ -17,7 +17,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Check if running in development mode (no Firebase)
-DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
+DEV_MODE = os.getenv("DEV_MODE", "true").lower() == "true"
+
+if DEV_MODE:
+    logger.warning("⚠️  Running in DEVELOPMENT MODE with mock database (no Firebase)")
+    logger.warning("⚠️  Data will NOT be persisted and will be lost on restart")
+    from .mock_db import get_mock_db
+else:
+    logger.info("Running in PRODUCTION MODE with Firebase")
+    from .firebase_config import get_firestore_client
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -55,6 +63,15 @@ from .models import (
     BusinessResponse,
     ErrorResponse,
 )
+
+# Import after app initialization to avoid circular imports
+if DEV_MODE:
+    logger.warning("⚠️  Running in DEVELOPMENT MODE with mock database (no Firebase)")
+    logger.warning("⚠️  Data will NOT be persisted and will be lost on restart")
+    from .mock_db import get_mock_db
+else:
+    logger.info("Running in PRODUCTION MODE with Firebase")
+    from .firebase_config import get_firestore_client
 
 
 @app.get("/")
@@ -102,11 +119,15 @@ async def create_quote(quote_data: QuoteData) -> Union[QuoteResponse, JSONRespon
         quote_dict = quote_data.dict()
         
         if DEV_MODE:
+            # Lazy import to avoid loading Firebase
+            from .mock_db import get_mock_db
             # Use mock database in development mode
             mock_db = get_mock_db()
             doc_id = mock_db.add_quote(quote_dict)
             logger.info(f"[DEV MODE] Quote created in mock database: {doc_id}")
         else:
+            # Lazy import Firebase only when needed
+            from .firebase_config import get_firestore_client
             # Use Firebase in production mode
             db = get_firestore_client()
             quote_dict["createdAt"] = datetime.utcnow().isoformat()
@@ -156,11 +177,13 @@ async def create_contact_message(
         message_dict = contact.dict()
         
         if DEV_MODE:
+            from .mock_db import get_mock_db
             # Use mock database in development mode
             mock_db = get_mock_db()
             doc_id = mock_db.add_message(message_dict)
             logger.info(f"[DEV MODE] Contact message created in mock database: {doc_id}")
         else:
+            from .firebase_config import get_firestore_client
             # Use Firebase in production mode
             db = get_firestore_client()
             message_dict["createdAt"] = datetime.utcnow().isoformat()
@@ -213,11 +236,13 @@ async def create_business_lead(
         lead_dict = business_lead.dict()
         
         if DEV_MODE:
+            from .mock_db import get_mock_db
             # Use mock database in development mode
             mock_db = get_mock_db()
             doc_id = mock_db.add_business_lead(lead_dict)
             logger.info(f"[DEV MODE] Business lead created in mock database: {doc_id}")
         else:
+            from .firebase_config import get_firestore_client
             # Use Firebase in production mode
             db = get_firestore_client()
             lead_dict["createdAt"] = datetime.utcnow().isoformat()
