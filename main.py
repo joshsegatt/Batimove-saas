@@ -4,33 +4,75 @@ FastAPI application for Batimove SaaS platform
 """
 
 import os
+import uuid
 from datetime import datetime
-from typing import Union
-import logging
+from typing import Optional
+from pydantic import BaseModel, EmailStr, Field
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Simple in-memory database
+class MockDB:
+    def __init__(self):
+        self.quotes = {}
+        self.messages = {}
+        self.leads = {}
+    
+    def add_quote(self, data):
+        id = str(uuid.uuid4())
+        self.quotes[id] = {**data, "createdAt": datetime.utcnow().isoformat()}
+        return id
+    
+    def add_message(self, data):
+        id = str(uuid.uuid4())
+        self.messages[id] = {**data, "createdAt": datetime.utcnow().isoformat()}
+        return id
+    
+    def add_lead(self, data):
+        id = str(uuid.uuid4())
+        self.leads[id] = {**data, "createdAt": datetime.utcnow().isoformat()}
+        return id
 
-# Check if running in development mode (no Firebase)
-DEV_MODE = os.getenv("DEV_MODE", "true").lower() == "true"
+db = MockDB()
 
-if DEV_MODE:
-    logger.warning("⚠️  Running in DEVELOPMENT MODE with mock database (no Firebase)")
-    logger.warning("⚠️  Data will NOT be persisted and will be lost on restart")
+# Models
+class ContactInfo(BaseModel):
+    name: str
+    email: EmailStr
+    phone: str
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="Batimove API",
-    description="Backend API for Batimove Premium Moving Platform",
-    version="1.0.0",
-)
+class QuoteData(BaseModel):
+    serviceId: str
+    date: str
+    contact: ContactInfo
+    fromZip: Optional[str] = None
+    toZip: Optional[str] = None
+    volume: Optional[int] = None
+    rooms: Optional[float] = None
+    housingType: Optional[str] = None
+    surface: Optional[int] = None
+    duration: Optional[str] = None
+    floor: Optional[int] = None
 
-# Configure CORS - Allow all origins for now
+class ContactMessage(BaseModel):
+    name: str
+    email: EmailStr
+    subject: str
+    message: str
+
+class BusinessLead(BaseModel):
+    companyName: str
+    contactName: str
+    email: EmailStr
+    phone: str
+    employeeCount: Optional[str] = None
+    serviceNeeds: str
+
+# Initialize FastAPI
+app = FastAPI(title="Batimove API", version="1.0.0")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -39,125 +81,68 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Import models after app initialization
-from api.models import (
-    QuoteData,
-    ContactMessage,
-    BusinessLead,
-    QuoteResponse,
-    ContactResponse,
-    BusinessResponse,
-    ErrorResponse,
-)
-
-
 @app.get("/")
 async def root():
-    """Root endpoint - API health check"""
     return {
         "message": "Batimove API is running",
         "version": "1.0.0",
-        "status": "healthy",
-        "mode": "development" if DEV_MODE else "production"
+        "status": "healthy"
     }
-
 
 @app.get("/api")
 async def api_root():
-    """API root endpoint"""
     return {
         "message": "Batimove API",
         "endpoints": {
             "quote": "/api/quote",
             "contact": "/api/contact",
-            "business": "/api/business",
-        },
+            "business": "/api/business"
+        }
     }
 
-
-@app.post(
-    "/api/quote",
-    response_model=QuoteResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_quote(quote_data: QuoteData) -> Union[QuoteResponse, JSONResponse]:
-    """Create a new quote request"""
+@app.post("/api/quote", status_code=status.HTTP_201_CREATED)
+async def create_quote(quote_data: QuoteData):
     try:
-        from api.mock_db import get_mock_db
-        
-        quote_dict = quote_data.dict()
-        mock_db = get_mock_db()
-        doc_id = mock_db.add_quote(quote_dict)
-        logger.info(f"[DEV MODE] Quote created: {doc_id}")
-        
-        return QuoteResponse(
-            success=True,
-            quoteId=doc_id,
-            message="Votre demande de devis a été enregistrée avec succès. Nous vous contacterons sous 24h.",
-        )
+        doc_id = db.add_quote(quote_data.dict())
+        return {
+            "success": True,
+            "quoteId": doc_id,
+            "message": "Votre demande de devis a été enregistrée avec succès."
+        }
     except Exception as e:
-        logger.error(f"Error creating quote: {str(e)}")
         return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"success": False, "error": str(e)},
+            status_code=500,
+            content={"success": False, "error": str(e)}
         )
 
-
-@app.post(
-    "/api/contact",
-    response_model=ContactResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_contact_message(contact: ContactMessage) -> Union[ContactResponse, JSONResponse]:
-    """Submit a contact form message"""
+@app.post("/api/contact", status_code=status.HTTP_201_CREATED)
+async def create_contact(contact: ContactMessage):
     try:
-        from api.mock_db import get_mock_db
-        
-        message_dict = contact.dict()
-        mock_db = get_mock_db()
-        doc_id = mock_db.add_message(message_dict)
-        logger.info(f"[DEV MODE] Contact message created: {doc_id}")
-        
-        return ContactResponse(
-            success=True,
-            messageId=doc_id,
-            message="Votre message a été envoyé avec succès. Nous vous répondrons dans les plus brefs délais.",
-        )
+        doc_id = db.add_message(contact.dict())
+        return {
+            "success": True,
+            "messageId": doc_id,
+            "message": "Votre message a été envoyé avec succès."
+        }
     except Exception as e:
-        logger.error(f"Error creating contact message: {str(e)}")
         return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"success": False, "error": str(e)},
+            status_code=500,
+            content={"success": False, "error": str(e)}
         )
 
-
-@app.post(
-    "/api/business",
-    response_model=BusinessResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_business_lead(business_lead: BusinessLead) -> Union[BusinessResponse, JSONResponse]:
-    """Capture B2B lead"""
+@app.post("/api/business", status_code=status.HTTP_201_CREATED)
+async def create_business(business_lead: BusinessLead):
     try:
-        from api.mock_db import get_mock_db
-        
-        lead_dict = business_lead.dict()
-        mock_db = get_mock_db()
-        doc_id = mock_db.add_business_lead(lead_dict)
-        logger.info(f"[DEV MODE] Business lead created: {doc_id}")
-        
-        return BusinessResponse(
-            success=True,
-            leadId=doc_id,
-            message="Merci pour votre intérêt. Notre équipe commerciale vous contactera sous 48h.",
-        )
+        doc_id = db.add_lead(business_lead.dict())
+        return {
+            "success": True,
+            "leadId": doc_id,
+            "message": "Merci pour votre intérêt. Notre équipe vous contactera sous 48h."
+        }
     except Exception as e:
-        logger.error(f"Error creating business lead: {str(e)}")
         return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"success": False, "error": str(e)},
+            status_code=500,
+            content={"success": False, "error": str(e)}
         )
 
-
-# Vercel/Railway handler
 handler = app
