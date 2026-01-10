@@ -1,24 +1,23 @@
-import sys
-import traceback
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-try:
-    from api.index import app
-    handler = app
-    print("✅ Successfully imported app from api.index", file=sys.stderr)
-except Exception as e:
-    print(f"❌ ERROR importing api.index: {e}", file=sys.stderr)
-    print(f"Traceback: {traceback.format_exc()}", file=sys.stderr)
-    
-    # Fallback: create minimal app
-    from fastapi import FastAPI
-    app = FastAPI()
-    
-    @app.get("/")
-    async def root():
-        return {
-            "error": "Failed to import main app",
-            "details": str(e),
-            "traceback": traceback.format_exc()
-        }
-    
-    handler = app
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/")
+def root():
+    return {"message": "Batimove API is running", "status": "ok"}
+
+@app.get("/api")
+def api_root():
+    return {"message": "API endpoint", "status": "ok"}
+
+# Vercel handler
+handler = app
