@@ -12,30 +12,12 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .firebase_config import get_firestore_client
-from .mock_db import get_mock_db
-from .models import (
-    QuoteData,
-    ContactMessage,
-    BusinessLead,
-    QuoteResponse,
-    ContactResponse,
-    BusinessResponse,
-    ErrorResponse,
-)
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Check if running in development mode (no Firebase)
 DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
-
-if DEV_MODE:
-    logger.warning("⚠️  Running in DEVELOPMENT MODE with mock database (no Firebase)")
-    logger.warning("⚠️  Data will NOT be persisted and will be lost on restart")
-else:
-    logger.info("Running in PRODUCTION MODE with Firebase")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -49,16 +31,29 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Vite dev server
-        "http://localhost:3000",  # Alternative dev port
-        "https://*.vercel.app",   # Vercel preview deployments
-        "https://batimove.com",   # Production domain (update with actual domain)
-        "https://www.batimove.com",
-    ],
+    allow_origins=["*"],  # Allow all origins for now
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Import after app initialization to avoid circular imports
+if DEV_MODE:
+    logger.warning("⚠️  Running in DEVELOPMENT MODE with mock database (no Firebase)")
+    logger.warning("⚠️  Data will NOT be persisted and will be lost on restart")
+    from .mock_db import get_mock_db
+else:
+    logger.info("Running in PRODUCTION MODE with Firebase")
+    from .firebase_config import get_firestore_client
+
+from .models import (
+    QuoteData,
+    ContactMessage,
+    BusinessLead,
+    QuoteResponse,
+    ContactResponse,
+    BusinessResponse,
+    ErrorResponse,
 )
 
 
@@ -69,6 +64,7 @@ async def root():
         "message": "Batimove API is running",
         "version": "1.0.0",
         "status": "healthy",
+        "mode": "development" if DEV_MODE else "production"
     }
 
 
