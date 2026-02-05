@@ -13,6 +13,14 @@ from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+# Import email service
+try:
+    from email_service import send_quote_email, send_contact_email
+    EMAIL_ENABLED = True
+except ImportError:
+    EMAIL_ENABLED = False
+    print("Warning: email_service not available. Emails will not be sent.")
+
 # Simple in-memory database
 class MockDB:
     def __init__(self):
@@ -103,7 +111,17 @@ async def api_root():
 @app.post("/api/quote", status_code=status.HTTP_201_CREATED)
 async def create_quote(quote_data: QuoteData):
     try:
+        # Save to database
         doc_id = db.add_quote(quote_data.dict())
+        
+        # Send email notification
+        if EMAIL_ENABLED:
+            try:
+                send_quote_email(quote_data.dict())
+            except Exception as email_error:
+                print(f"Email sending failed: {str(email_error)}")
+                # Continue even if email fails
+        
         return {
             "success": True,
             "quoteId": doc_id,
@@ -118,7 +136,17 @@ async def create_quote(quote_data: QuoteData):
 @app.post("/api/contact", status_code=status.HTTP_201_CREATED)
 async def create_contact(contact: ContactMessage):
     try:
+        # Save to database
         doc_id = db.add_message(contact.dict())
+        
+        # Send email notification
+        if EMAIL_ENABLED:
+            try:
+                send_contact_email(contact.dict())
+            except Exception as email_error:
+                print(f"Email sending failed: {str(email_error)}")
+                # Continue even if email fails
+        
         return {
             "success": True,
             "messageId": doc_id,
